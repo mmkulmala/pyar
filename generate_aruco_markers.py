@@ -197,6 +197,70 @@ def create_pdf_with_markers(markers_dict, output_path, marker_size=200, spacing=
     print(f"✓ PDF saved to: {output_path}")
 
 
+def create_png_marker_card(markers_dict, output_path, marker_size=200, spacing=50, markers_per_row=4):
+    """
+    Create a PNG image containing all markers arranged in a grid.
+    
+    Args:
+        markers_dict: Dictionary with marker_id as key and marker image as value
+        output_path: Path to save the PNG file
+        marker_size: Size of each marker in pixels
+        spacing: Space between markers in pixels
+        markers_per_row: Number of markers to display per row
+    """
+    # Calculate grid dimensions
+    num_markers = len(markers_dict)
+    num_rows = (num_markers + markers_per_row - 1) // markers_per_row
+    
+    # Calculate dimensions
+    scaled_marker_size = marker_size
+    scaled_spacing = spacing
+    label_height = 30
+    
+    # Calculate total image dimensions
+    content_width = markers_per_row * scaled_marker_size + (markers_per_row + 1) * scaled_spacing
+    content_height = num_rows * (scaled_marker_size + label_height) + (num_rows + 1) * scaled_spacing
+    
+    # Create a blank white image
+    card_image = Image.new('RGB', (content_width, content_height), color='white')
+    draw = ImageDraw.Draw(card_image)
+    
+    # Paste markers onto image
+    x_offset = scaled_spacing
+    y_offset = scaled_spacing
+    
+    for idx, marker_id in enumerate(sorted(markers_dict.keys())):
+        marker_cv = markers_dict[marker_id]
+        
+        # Convert grayscale to RGB for PIL
+        marker_rgb = cv2.cvtColor(marker_cv, cv2.COLOR_GRAY2RGB)
+        marker_pil = Image.fromarray(marker_rgb)
+        
+        row = idx // markers_per_row
+        col = idx % markers_per_row
+        
+        x = x_offset + col * (scaled_marker_size + scaled_spacing)
+        y = y_offset + row * (scaled_marker_size + scaled_spacing + label_height)
+        
+        # Paste marker
+        card_image.paste(marker_pil, (x, y))
+        
+        # Add text label below marker
+        label_x = x + scaled_marker_size // 2
+        label_y = y + scaled_marker_size + 5
+        label_text = f"ID: {marker_id}"
+        
+        try:
+            draw.text((label_x, label_y), label_text, fill='black', anchor='mm')
+        except:
+            pass  # Font rendering might fail on some systems
+    
+    # Save as PNG
+    card_image.save(str(output_path))
+    print(f"✓ PNG marker card saved to: {output_path}")
+
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate multiple ArUco markers and save as PDF and/or JPG",
@@ -281,6 +345,11 @@ Examples:
         type=int,
         default=95,
         help="JPG quality 1-100 (default: 95)"
+    )
+    parser.add_argument(
+        "--card",
+        action="store_true",
+        help="Generate test_marker_card.png with all markers arranged in grid"
     )
     
     args = parser.parse_args()
@@ -380,6 +449,22 @@ Examples:
             )
         except Exception as e:
             print(f"✗ Error creating PDF: {e}")
+            return 1
+    
+    # Create PNG marker card if requested
+    if args.card:
+        try:
+            print(f"Creating test_marker_card.png with {args.cols} markers per row...")
+            png_card_path = output_dir / "test_marker_card.png"
+            create_png_marker_card(
+                markers_dict,
+                str(png_card_path),
+                marker_size=args.size,
+                spacing=args.spacing,
+                markers_per_row=args.cols
+            )
+        except Exception as e:
+            print(f"✗ Error creating PNG marker card: {e}")
             return 1
     
     # Print summary

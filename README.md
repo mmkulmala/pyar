@@ -26,6 +26,7 @@ Three main components are included:
 | Generate single/multiple markers | ❌ | ❌ | ✅ |
 | PDF output (print-ready) | ❌ | ❌ | ✅ |
 | JPG output (individual files) | ❌ | ❌ | ✅ |
+| PNG card output (combined grid) | ❌ | ❌ | ✅ |
 | Custom marker dictionary support | ❌ | ❌ | ✅ |
 
 ---
@@ -118,6 +119,12 @@ python generate_aruco_markers.py --dict DICT_6X6_250 --count 20
 python generate_aruco_markers.py --count 20 --cols 5 --size 300 --spacing 100
 ```
 
+#### Generate test marker card as PNG
+```bash
+python generate_aruco_markers.py --count 4 --card --output markers/
+```
+**Output:** `markers/test_marker_card.png` (4 markers arranged in a grid with labels, saved as PNG image)
+
 ##### Marker Generator Arguments
 
 | Argument | Type | Default | Description |
@@ -131,6 +138,7 @@ python generate_aruco_markers.py --count 20 --cols 5 --size 300 --spacing 100
 | `--size` | int | 200 | Marker size in pixels |
 | `--spacing` | int | 50 | Spacing between markers in PDF (pixels) |
 | `--cols` | int | 4 | Number of markers per row in PDF |
+| `--card` | flag | disabled | Generate `test_marker_card.png` with all markers arranged in grid |
 
 **Available ArUco Dictionaries:**
 - `DICT_4X4_50` - 4×4 pixels, 50 markers
