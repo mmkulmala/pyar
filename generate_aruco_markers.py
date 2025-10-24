@@ -13,10 +13,24 @@ Usage:
 """
 
 import argparse
+import sys
 import cv2
 import numpy as np
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
+
+
+def check_aruco_available():
+    """Check if cv2.aruco module is available."""
+    try:
+        # Test if aruco module exists and has getPredefinedDictionary
+        if not hasattr(cv2, 'aruco'):
+            return False, "cv2.aruco module not found"
+        if not hasattr(cv2.aruco, 'getPredefinedDictionary'):
+            return False, "cv2.aruco.getPredefinedDictionary not available"
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
 
 
 def generate_single_marker(marker_id, aruco_dict, marker_size=200):
@@ -31,8 +45,48 @@ def generate_single_marker(marker_id, aruco_dict, marker_size=200):
     Returns:
         numpy array containing the marker image
     """
-    marker_image = cv2.aruco.generateImageMarker(aruco_dict, marker_id, marker_size)
-    return marker_image
+    # Prefer cv2.aruco.drawMarker when available (newer OpenCV versions),
+    # otherwise fall back to generateImageMarker. As a last resort attempt
+    # to read from the dictionary bytesList.
+    try:
+        # drawMarker (returns an image) is available in newer OpenCV
+        if hasattr(cv2.aruco, 'drawMarker'):
+            try:
+                marker_image = cv2.aruco.drawMarker(aruco_dict, int(marker_id), int(marker_size))
+                # ensure grayscale uint8
+                marker_image = np.asarray(marker_image)
+                if marker_image.dtype != np.uint8:
+                    marker_image = (marker_image * 255).astype(np.uint8)
+                if marker_image.ndim == 3 and marker_image.shape[2] == 3:
+                    marker_image = cv2.cvtColor(marker_image, cv2.COLOR_BGR2GRAY)
+                return marker_image
+            except Exception:
+                pass
+
+        # Older versions may provide generateImageMarker
+        if hasattr(cv2.aruco, 'generateImageMarker'):
+            try:
+                marker_image = cv2.aruco.generateImageMarker(aruco_dict, int(marker_id), int(marker_size))
+                return marker_image
+            except Exception:
+                pass
+
+        # Try constructing from bytesList (low-level); this may work depending on the cv2 build
+        try:
+            bits = aruco_dict.bytesList[int(marker_id)]
+            arr = np.frombuffer(bits, dtype=np.uint8)
+            # unpack bits to bitmap
+            bits_unpacked = np.unpackbits(arr)
+            side = int(np.sqrt(bits_unpacked.size))
+            bitmap = bits_unpacked.reshape((side, side)).astype(np.uint8) * 255
+            marker_image = cv2.resize(bitmap, (int(marker_size), int(marker_size)), interpolation=cv2.INTER_NEAREST)
+            return marker_image
+        except Exception:
+            pass
+
+        raise RuntimeError("No available ArUco marker generator function in this OpenCV build.")
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate marker: {e}")
 
 
 def save_individual_jpg(marker_image, marker_id, output_path, quality=95):
@@ -194,15 +248,15 @@ Examples:
     parser.add_argument(
         "--output",
         type=str,
-        default="markers/",
-        help="Output directory for markers (default: markers/)"
+        default="sources/",
+        help="Output directory for markers (default: sources/)"
     )
     parser.add_argument(
         "--format",
         type=str,
         choices=['pdf', 'jpg', 'png', 'both'],
-        default='pdf',
-        help="Output format: pdf, jpg, png, or both (default: pdf)"
+        default='jpg',
+        help="Output format: pdf, jpg, png, or both (default: jpg)"
     )
     parser.add_argument(
         "--size",
@@ -231,18 +285,38 @@ Examples:
     
     args = parser.parse_args()
     
+    # Check if cv2.aruco is available
+    aruco_available, check_msg = check_aruco_available()
+    if not aruco_available:
+        print(f"[ERROR] cv2.aruco not available. Make sure opencv-contrib-python is installed")
+        print(f"Details: {check_msg}")
+        print(f"\nYour OpenCV version: {cv2.__version__}")
+        print(f"To fix this, run:")
+        print(f"  pip install --upgrade opencv-contrib-python")
+        print(f"  or use: bash install.sh")
+        return 1
+    
     # Get ArUco dictionary
     aruco_dict_name = args.dict
     try:
+        if not hasattr(cv2.aruco, aruco_dict_name):
+            print(f"✗ Error: Unknown ArUco dictionary '{aruco_dict_name}'")
+            print("Available dictionaries:")
+            print("  DICT_4X4_50, DICT_5X5_100, DICT_6X6_250, DICT_7X7_1000, DICT_ARUCO_ORIGINAL")
+            return 1
+        
         aruco_dict = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, aruco_dict_name))
-    except AttributeError:
-        print(f"Error: Unknown ArUco dictionary '{aruco_dict_name}'")
-        print("Available dictionaries: DICT_4X4_50, DICT_5X5_100, DICT_6X6_250, DICT_7X7_1000, DICT_ARUCO_ORIGINAL")
+    except Exception as e:
+        print(f"✗ Error loading ArUco dictionary: {e}")
         return 1
     
     # Create output directory
     output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"✗ Error creating output directory: {e}")
+        return 1
     
     # Determine which markers to generate
     marker_ids = None
@@ -287,10 +361,10 @@ Examples:
             continue
     
     if not markers_dict:
-        print("No markers were generated successfully.")
+        print("✗ No markers were generated successfully.")
         return 1
     
-    print(f"\nGenerated {len(markers_dict)} markers successfully.")
+    print(f"\n✓ Generated {len(markers_dict)} markers successfully.")
     
     # Create PDF with all markers if requested
     if args.format in ['pdf', 'both']:

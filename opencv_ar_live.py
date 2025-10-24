@@ -5,7 +5,7 @@ Real-time Augmented Reality demo using OpenCV and ArUco markers,
 with exponential smoothing (stabilization) for steady overlay.
 
 Usage:
-    poetry run python opencv_ar_live_stable.py --source sources/jp.jpg
+    python opencv_ar_live_stable.py --source sources/marker_0000.jpg
 Press 'q' to quit.
 """
 

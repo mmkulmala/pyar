@@ -1,0 +1,6 @@
+numpy>=2.2
+imutils>=0.5.4
+Pillow>=11.3
+reportlab>=4.4
+opencv-contrib-python>=4.12.0.88
+rex>=2.0.14
